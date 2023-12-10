@@ -1,0 +1,4 @@
+name = "xdfjulia"
+uuid = "83b1ed31-95cc-4f41-a134-6ac8303541c0"
+authors = ["Pedro Juan Royo <pedro.juan.royo@gmail.com>"]
+version = "0.1.0"
