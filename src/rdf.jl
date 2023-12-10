@@ -22,9 +22,8 @@ function grsample(particles, g, nparts::Int64, delg::Float64, rmax::Float64, box
 	# ngr += 1 # incerase counter
 	
 	# Loop over all particle pairs
-	for i in range(1,stop=nparts-1)	
-		println("Particle $i")
-		for j in range(i+1,stop=nparts)
+	Threads.@threads for i in range(1,stop=nparts-1)	
+		Threads.@threads for j in range(i+1,stop=nparts)
 			xr = get_nearest_img(parse(Float64,particles[i][2]), parse(Float64,particles[j][2]), boxx)
 			yr = get_nearest_img(parse(Float64,particles[i][3]), parse(Float64,particles[j][3]), boxy)
 			zr = get_nearest_img(parse(Float64,particles[i][4]), parse(Float64,particles[j][4]), boxz)
@@ -115,8 +114,10 @@ open("test") do f
 			end
 
 			# Run rdf algorithm after reading all particles of one timestep
-			grsample(particles, g, nparts, delg, rmax, boxx, boxy, boxz)
 			ngr += 1
+			print("Analysing step $ngr... ")
+			grsample(particles, g, nparts, delg, rmax, boxx, boxy, boxz)
+			println("Done")
 			break
 		end
 	end
