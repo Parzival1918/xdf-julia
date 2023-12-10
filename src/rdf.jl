@@ -1,12 +1,16 @@
 # RDF Algorithm adapted from book: 
 #       Understanding Molecular Simulation, From Algorithms to Applications 3rd edition
 
+# Imports
+
+#using TarIterators
+
 # Functions 
 
 """
 Get nearest image of a particle
 """
-function get_nearest_img(posi, posj, boxlength)
+function get_nearest_img(posi::Float64, posj::Float64, boxlength::Float64)
 	dist = posi - posj
 	return dist - boxlength*round(Int, dist/boxlength)
 end
@@ -14,18 +18,22 @@ end
 """
 Accumulate histogram of pair distances 
 """
-function grsample(particles, g)
+function grsample(particles, g, nparts::Int64, delg::Float64, rmax::Float64, boxx::Float64, boxy::Float64, boxz::Float64)
 	# ngr += 1 # incerase counter
-
+	println("In")
 	# Loop over all particle pairs
-	for i in range(1,length=nparts-1)	
-		for j in range(i+1,length=nparts)
-			xr = get_nearest_img(particles[i][2], particles[j][2], box[1])
-			yr = get_nearest_img(particles[i][3], particles[j][3], box[2])
-			zr = get_nearest_img(particles[i][4], particles[j][4], box[3])
+	for i in range(1,stop=nparts-1)	
+		for j in range(i+1,stop=nparts)
+			if i+j % 100 == 0
+				println("Progress")
+			end
+
+			xr = get_nearest_img(parse(Float64,particles[i][2]), parse(Float64,particles[j][2]), boxx)
+			yr = get_nearest_img(parse(Float64,particles[i][3]), parse(Float64,particles[j][3]), boxy)
+			zr = get_nearest_img(parse(Float64,particles[i][4]), parse(Float64,particles[j][4]), boxz)
 			r = sqrt(xr^2 + yr^2 + zr^2)
-			if r < box/2 # only consider dist less than box/2
-				ig = Int(r/delg)
+			if r < rmax #box/2 # only consider dist less than box/2
+				ig = trunc(Int,r/delg)
 				g[ig] += 2 # increment histogram for both particles
 			end
 		end
@@ -37,7 +45,7 @@ Normalises the radial distribution at end of run
 """
 function grnormalise()
 	gfac = (4/3)*pi*(delg^3) # convert bins to 3d shells
-	for i in range(1,length=nhis)
+	for i in range(1,stop=nhis)
 		vb = gfac*((i + 1)^3 - i^3) # volume of i-th bin
 		nid = vb*rho # number of ideal gas particles in volume vb
 		g(i) = g(i)/(ngr*npart*nid) # normalise g(r)
@@ -52,10 +60,64 @@ box = (50, 50, 50) # box size (x, y, z)
 
 # Other vars
 
-delg = box/(2*nhis) # bin size
+#delg = box/(2*nhis) # bin size
 ngr = 0 # count the number of times grsample() is called
 g = zeros(Float64, nhis) # vector to store the g(r)
 #nparts = 
-rho = nparts/(box[1]*box[2]*box[3]) # number density of system
+#rho = nparts/(box[1]*box[2]*box[3]) # number density of system
 
-println(g)
+# Read the contents of the LAMMPS traj file
+# File must have columns in order: id element xu yu zu
+
+open("test") do f
+	nparts = 0
+	boxx = 0
+	boxy = 0
+	boxz = 0
+	delg = 0.2
+	ngr = 0
+	nhis = 100
+
+	rmax = nhis*delg
+	g = zeros(Float64, nhis) # vector to store the g(r)
+
+	while ! eof(f)
+		line = readline(f) # read a line from the file
+		
+		# Extract number of atoms -> nparts
+		if startswith(line, "ITEM: NUMBER OF ATOMS")
+			nparts = parse(Int64,readline(f))
+		# Extract the 	size of the box
+		elseif startswith(line, "ITEM: BOX BOUNDS xy xz yz pp pp pp")	
+			# xlo xhi xy
+			# ylo yhi xz
+			# zlo zhi yz
+			line = readline(f)
+			lo, hi, _ = split(line, " ")
+			boxx = parse(Float64, hi) - parse(Float64, lo)
+			line = readline(f)
+			lo, hi, _ = split(line, " ")
+			boxy = parse(Float64, hi) - parse(Float64, lo)
+			line = readline(f)
+			lo, hi, _ = split(line, " ")
+			boxz = parse(Float64, hi) - parse(Float64, lo)
+		# Extract particle positions
+		elseif startswith(line, "ITEM: ATOMS id element xu yu zu")
+			particles = Vector{NTuple{4, String}}(undef, nparts)
+			line = readline(f)
+			count = 1
+			while ! startswith(line,"ITEM:")
+				_, elem, xu, yu, zu = split(line, " ")
+				particles[count] = (elem, xu, yu, zu)
+
+				count += 1
+				line = readline(f)
+			end
+
+			# Run rdf algorithm after reading all particles of one timestep
+			grsample(particles, g, nparts, delg, rmax, boxx, boxy, boxz)
+			print(g)
+			break
+		end
+	end
+end
