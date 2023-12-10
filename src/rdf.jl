@@ -20,14 +20,11 @@ Accumulate histogram of pair distances
 """
 function grsample(particles, g, nparts::Int64, delg::Float64, rmax::Float64, boxx::Float64, boxy::Float64, boxz::Float64)
 	# ngr += 1 # incerase counter
-	println("In")
+	
 	# Loop over all particle pairs
 	for i in range(1,stop=nparts-1)	
+		println("Particle $i")
 		for j in range(i+1,stop=nparts)
-			if i+j % 100 == 0
-				println("Progress")
-			end
-
 			xr = get_nearest_img(parse(Float64,particles[i][2]), parse(Float64,particles[j][2]), boxx)
 			yr = get_nearest_img(parse(Float64,particles[i][3]), parse(Float64,particles[j][3]), boxy)
 			zr = get_nearest_img(parse(Float64,particles[i][4]), parse(Float64,particles[j][4]), boxz)
@@ -43,12 +40,12 @@ end
 """
 Normalises the radial distribution at end of run
 """
-function grnormalise()
+function grnormalise(g, delg::Float64, nhis::Int64, rho::Float64, ngr::Int64, npart::Int64)
 	gfac = (4/3)*pi*(delg^3) # convert bins to 3d shells
 	for i in range(1,stop=nhis)
 		vb = gfac*((i + 1)^3 - i^3) # volume of i-th bin
 		nid = vb*rho # number of ideal gas particles in volume vb
-		g(i) = g(i)/(ngr*npart*nid) # normalise g(r)
+		g[i] = g[i]/(ngr*npart*nid) # normalise g(r)
 	end
 end
 
@@ -77,6 +74,7 @@ open("test") do f
 	delg = 0.2
 	ngr = 0
 	nhis = 100
+	rho = 0
 
 	rmax = nhis*delg
 	g = zeros(Float64, nhis) # vector to store the g(r)
@@ -101,6 +99,8 @@ open("test") do f
 			line = readline(f)
 			lo, hi, _ = split(line, " ")
 			boxz = parse(Float64, hi) - parse(Float64, lo)
+			
+			rho = nparts/(boxx*boxy*boxz) # number density of system
 		# Extract particle positions
 		elseif startswith(line, "ITEM: ATOMS id element xu yu zu")
 			particles = Vector{NTuple{4, String}}(undef, nparts)
@@ -116,8 +116,13 @@ open("test") do f
 
 			# Run rdf algorithm after reading all particles of one timestep
 			grsample(particles, g, nparts, delg, rmax, boxx, boxy, boxz)
-			print(g)
+			ngr += 1
 			break
 		end
+	end
+
+	grnormalise(g, delg, nhis, rho, ngr, nparts) # normalise the rdf
+	for i in range(1,stop=nhis)
+		println("$(i*delg) $(g[i])")
 	end
 end
